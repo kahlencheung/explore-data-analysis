@@ -1,0 +1,385 @@
+---
+title: "Data Analysis on NYC City Bikes Performance (2018)"
+author: "Kahlen Cheung"
+date: "21-04-2022"
+output:
+  html_document:
+    code_folding: hide
+  pdf_document: default
+toc: yes
+toc_float: yes
+toc_collapsed: yes
+number_sections: yes
+theme: cerulean
+highlight: kate
+---
+
+```{r setup, message = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "left")
+knitr::opts_chunk$set(tidy = "styler")
+
+library(tsibbledata)
+library(tsibble)
+library(tidyverse)
+library(janitor)
+library(lubridate)
+
+```
+
+## Overview
+The __Data Analysis on NYC City Bikes Performance 2018__ (the report)is based on the research on the usage of 10 bikes in 2018 by [NYC Citi Bike](https://citibikenyc.com/homepage)  There are a total of 4268 observations, covering customers' gender, age, gender, bike usage type, as well as trips details including start and end times and locations. 
+
+## Data Ethic Guidline
+The data used in this report is a public source stored in the Github `tidyverse package`. There is not direct consent authorized by NYC Citi Bikes or NYC Citi Bikes's users. This report is only used for data analysis case study. 
+
+On behalf of the data collected by NYC Citi Bikes, there is not evidence show that it disclosure users' private data: such as names, personal ID, or address etc. However, the Citi Bike app and the online payment system record users' travelling pattern and consumption habits，which may cause the risk to expose personal behaviors to the third party without agreement.
+
+## Objective
+
+This report explores the overall bike hiring service performance in 2018. The analysis focuses on the sectors of:
+
+- The relations between gender and customer type;
+- The relations between travel duration and age;
+- Performance by month;
+- Performance by weekday;
+- An overview of popularity of different stations
+
+## Report flow
+- Data cleaning and wrangling 
+- Data analysis and visualizations
+- Key Suggestions
+
+#### Data cleaning and wrangling
+
+The original size of the dataset were 12 variables with 4268 observations. For a better evaluation and understanding of the topic, it is expanded with 6 more columns: the separated columns for year, month, weekday and date, age and travelled duration. The table is saved as `nyc_bikes_mass`.
+
+```{r echo=FALSE,results='hide'}
+
+nyc_bikes_df <- nyc_bikes %>% 
+  clean_names()
+
+glimpse(nyc_bikes_df)
+view(nyc_bikes_df)
+
+nyc_bikes_df_day_fixed <- nyc_bikes_df %>% 
+  mutate(date = day(start_time), .after = 2) %>% 
+  mutate(month = month(start_time, label = TRUE, abbr = FALSE), .after = 3) %>% 
+  mutate(year = year(start_time), .after = 4)
+
+nyc_bikes_df_day_fixed <- nyc_bikes_df_day_fixed %>% 
+  mutate(travelled_time = stop_time - start_time, .after = 6) %>% 
+  mutate( age = year - birth_year, .after = 14)
+
+nyc_bikes_df_day_fixed 
+
+nyc_bikes_mass <- nyc_bikes_df_day_fixed 
+
+write.csv(nyc_bikes_mass, file = here::here("data/nyc_bikes_mass.csv"))
+
+```
+
+<details>
+<summary>View dataset</summary>
+<br>
+```{r}
+knitr::kable(nyc_bikes_mass[1:5, 1:17], format = "markdown")
+```
+</details>
+
+Change the weekday column to a proper weekday format, and save the table as `nyc_bikes_mass_weekday`.
+
+```{r echo=FALSE,results='hide'}
+
+nyc_bikes_mass_weekday_num <- nyc_bikes_mass %>% 
+  mutate(weekday = wday(start_time), .after = 5)
+
+
+nyc_bikes_mass_weekday <- nyc_bikes_mass %>% 
+  mutate(weekday = wday(start_time), .after = 5) %>% 
+  mutate(weekday = case_when(
+    weekday == "1" ~ "Sunday",
+    weekday == "2" ~ "Monday",
+    weekday == "3" ~ "Tuesday",
+    weekday == "4" ~ "Wednesday",
+    weekday == "5" ~ "Thursday",
+    weekday == "6" ~ "Friday",
+    weekday == "7" ~ "Saturday"
+  ))
+
+write.csv(nyc_bikes_mass_weekday, file = here::here("data/nyc_bikes_mass_weekday.csv"))
+       
+nyc_bikes_mass_weekday
+```
+
+<details>
+<summary>View dataset</summary>
+<br>
+```{r}
+knitr::kable(nyc_bikes_mass_weekday[1:5, 1:18], format = "markdown")
+```
+</details>
+<br>
+<br>
+<br>
+
+#### Data analysis and visualizations 
+In this section we will explore more about the dataset by visualizations
+<br>
+<br>
+<br>
+
+1. _An analysis on user demographic_
+- Below visualizations contain the observations of gender and user type.<br>
+- The age at around __30__ is the most common users of all, followed by age range from __44 to 49__.<br>
+- It shows that in the total number of 3096 male users, 2985 are subscribers __(96%)__,<br>
+- while in the total number of 930 female users, 883 are subscribers __(94%)__.<br>
+- It also shows that the number of male subscribers is nearly  __300%__ of female subscribers<br>
+<br>
+```{r echo=FALSE,warning=FALSE}
+nyc_bikes_mass %>%
+  filter(age <= 100) %>% 
+  ggplot(aes(x = age)) +
+  geom_histogram(col = "white")+
+  xlab("Age") + ylab("Count")+
+  ggtitle("Distribution of User")
+```
+
+<br>
+```{r echo=FALSE,warning=FALSE}
+
+nyc_bikes_mass %>%
+  ggplot(aes(x = gender, fill = type)) +
+  geom_bar(col = "white", bins = 5)+
+  geom_label(aes(x = gender, label = ..count..), stat = 'count', size = 3)+
+  xlab("Gender") + ylab("Count")+
+  guides(fill=guide_legend(title="Type of User"))+
+  ggtitle("Type of User by Gender")
+  
+
+```
+<br>
+Suggestions
+<br>
+_There is still room to expand female users, where an appropriate marketing plan for targeting female is required._
+<br>
+<br>
+<br>
+
+2. _An analysis on gender and number of user by Month_
+- This visualizations contains the observations of gender, number of user and usage of each month in 2018.
+- The plot shows that in July and August, the bicycle hiring service has the highest volume of demand, while January and February has the least. 
+- The mean of number of user in each month is __355__, where 6 months (May to October) meet the value.
+<br>
+```{r echo=FALSE,warning=FALSE}
+
+month_ppl_count <- nyc_bikes_mass %>% 
+  group_by(month) %>% 
+  count() %>% 
+  rename("ppl_count" = n) 
+
+ppl_count <- mean(month_ppl_count$ppl_count)
+
+nyc_bikes_mass %>%
+  ggplot(aes(x = month, fill = gender)) +
+  geom_bar(col = "white", bins = 20)+
+  xlab("Month") + ylab("Count")+
+  theme(axis.text.x= element_text(size = 7))+
+  guides(fill=guide_legend(title="Gender"))+
+  scale_fill_brewer(palette = "Dark2")+
+  ggtitle("Number of User from January to December, 2018")
+
+  
+
+
+```
+<br>
+Suggestions
+<br>
+_The most popular bikes hiring service season is Summer (May to October), a Seasonal(Winter) discount plan may help to boost the performance when it is not in the peak Season_
+<br>
+<br>
+<br>
+
+3. _An analysis on weekday and travel duration by age_
+- This visualizations review the service performance in weekdays, and the observation of travel duration by age.
+- The graph indicates that Tuesday has the most users, while Sunday has the least.
+- The most common travel duration time is less than 25 mins, where mainly covered by the age group of __21-30__.
+- The age group of 41-50 tends to have longer travel time (50 mins or more) than other groups.
+
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+
+nyc_bikes_mass_weekday <- nyc_bikes_mass_weekday %>% 
+  mutate(age_range = case_when(
+    age > 5 & age <=20 ~ "6-20",
+    age > 20 & age <= 30 ~ "21-30",
+    age > 30 & age <= 40 ~ "31-40",
+    age > 40 & age <= 50 ~ "41-50",
+    age > 50 & age <= 60 ~ "51-60",
+    age >60 ~ "over 61"
+  ))
+
+nyc_bikes_mass_weekday$weekday <- factor(nyc_bikes_mass_weekday$weekday, levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday","Friday","Saturday"))
+
+nyc_bikes_mass_weekday %>% 
+  ggplot(aes(x = weekday, fill = age_range))+
+  geom_bar()+
+  coord_flip()+
+  xlab("Count")+ylab("Weekday")+
+  guides(fill = guide_legend(title="Age"))+
+   ggtitle("Service Performance in Weekdays")
+```
+<br>
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+
+
+
+
+nyc_bikes_mass_weekday %>% 
+  filter(travelled_time <= 100) %>% 
+  filter(age <75) %>% 
+  ggplot(aes(x = travelled_time, fill = age_range))+
+  geom_dotplot(binwidth = 1, colour="white")+
+  guides(fill = guide_legend(title="Age"))+
+  ggtitle("Travel Duration by Age")+
+  xlab("Travel time (mins)")
+
+```
+Suggestions
+<br>
+_A promotion targeting to people age over 50 would help expand the age range of users. As well as a discount plan on Sunday, or riding time over 50 mins may attract more users._ 
+<br>
+<br>
+<br>
+```{r echo=FALSE,results='hide'}
+
+date_count <- nyc_bikes_df_day_fixed %>% 
+  index_by(date) %>% 
+  count()
+
+
+month_count <- nyc_bikes_df_day_fixed %>% 
+  index_by(month) %>% 
+  count()
+
+year_count <- nyc_bikes_df_day_fixed %>% 
+  index_by(year) %>% 
+  count()
+
+
+nyc_bikes_df_day_fixed %>% 
+  group_by(gender) %>% 
+  count()
+
+nyc_bikes_df_day_fixed %>% 
+  group_by(type) %>% 
+  count()
+
+
+#gender and type of customer
+#cycling duration hms-hms
+#start_time-birth year > age
+
+
+```
+
+
+
+```{r echo=FALSE,results='hide'}
+library(leaflet)
+```
+
+
+```{r echo=FALSE,results='hide'}
+
+nyc_bikes_mass %>% 
+  group_by(start_station) %>% 
+  count() %>% 
+  arrange(n) %>% 
+  tail(10)
+
+
+nyc_bikes_mass %>% 
+  group_by(end_station) %>% 
+  count() %>% 
+  arrange(n)
+
+
+```
+
+<br>
+<br>
+<br>
+
+4. _An overview of popularity of different stations_
+- This geographic interprets the locations of the 52 stations in New York City.
+- The blue markers show the top 3 most popular stations: `Richmond Rd(3186)`, `Steinway St(3203)`, `Sip Ave(3195)`.
+- The warning markers show the stations which people of count in usage is fewer than 20.
+- Stations located in non city centre area have fewer users.
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+
+nyc_bikes_subset <- nyc_bikes_mass %>% 
+  group_by(start_station, start_lat, start_long) %>% 
+  count() %>% 
+  arrange(n)
+
+
+bikeIcon <- makeIcon(
+  iconUrl = "https://img.icons8.com/external-others-pike-picture/344/external-bike-bike-sharing-business-others-pike-picture-15.png" ,
+  iconWidth = 24, iconHeight =  24)
+
+warningIcon <- makeIcon(
+  iconUrl = "https://img.icons8.com/dusk/344/high-importance.png",
+  iconWidth = 24, iconHeight =  24
+)
+
+
+
+geticons <- icons(
+  iconUrl = ifelse(nyc_bikes_subset$n <= 20,
+    "https://img.icons8.com/external-kiranshastry-lineal-color-kiranshastry/344/external-warning-construction-and-tools-kiranshastry-lineal-color-kiranshastry.png",
+    "https://img.icons8.com/external-others-pike-picture/344/external-bike-bike-sharing-business-others-pike-picture-15.png"), iconWidth = 24, iconHeight =  24)
+
+# https://img.icons8.com/external-kiranshastry-lineal-color-kiranshastry/344/external-warning-construction-and-tools-kiranshastry-lineal-color-kiranshastry.png
+
+# "https://img.icons8.com/dusk/344/high-importance.png"
+
+nyc_bikes_map <- leaflet(data = nyc_bikes_subset[1:49, ]) %>%
+  addTiles() %>% 
+  addMarkers(lat = ~start_lat, lng = ~start_long,icon = geticons) %>% 
+ # icon = ifelse(nyc_bikes_subset$n <=30, bikeIcon, warningIcon) 
+  addMarkers(
+    lng = -74.04312	, lat = 40.71959,
+    label = "TOP 1 (434ppl)",
+    labelOptions = labelOptions(noHide = T, )) %>% 
+  addMarkers(
+    lng = -74.04425, lat = 40.72760,
+    label = "TOP 2 (278ppl)",
+    labelOptions = labelOptions(noHide = T)) %>% 
+  addMarkers(
+    lng = -74.06378, lat = 40.73074,
+    label = "TOP 3 (250ppl)",
+    labelOptions = labelOptions(noHide = T)) 
+  
+
+
+nyc_bikes_map
+
+
+
+# popup="Start Station"
+
+```
+<br>
+Suggestions<br>
+_Stations away from city centre may stress on the running cost in a long term._
+<br>
+<br>
+<br>
+
+\bcenter
+The End
+\ecenter
+
+
+
+
